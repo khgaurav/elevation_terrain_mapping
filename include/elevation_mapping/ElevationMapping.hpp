@@ -74,6 +74,13 @@ class ElevationMapping {
                           const SensorProcessorBase::Ptr& sensorProcessor_);
 
   /*!
+   * Callback function for Terrasense grid map updates.
+   *
+   * @param terrasenseMsg    The grid map message from Terrasense containing terrain cost data.
+   */
+  void terrasenseCallback(const grid_map_msgs::msg::GridMap::SharedPtr terrasenseMsg);
+
+  /*!
    * Callback function for the update timer. Forces an update of the map from
    * the robot's motion if no new measurements are received for a certain time
    * period.
@@ -295,6 +302,9 @@ class ElevationMapping {
   //! Size of the cache for the robot pose messages.
   int robotPoseCacheSize_;
 
+  //! Terrasense grid map subscriber.
+  rclcpp::Subscription<grid_map_msgs::msg::GridMap>::SharedPtr terrasenseSubscriber_;
+
   //! Frame ID of the elevation map
   std::string mapFrameId_;
 
@@ -309,6 +319,7 @@ class ElevationMapping {
   //! ROS topics for subscriptions.
   std::string pointCloudTopic_;  //!< Deprecated, use input_source instead.
   std::string robotPoseTopic_;
+  std::string terrasenseTopic_;  //!< Topic for Terrasense grid map data.
 
   //! Elevation map.
   ElevationMap map_;

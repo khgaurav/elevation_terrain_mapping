@@ -1,0 +1,51 @@
+/**:
+  ros__parameters:
+    inputs: ['realsense']
+    realsense: # A name to identify the input source
+      type: pointcloud # Supported types: pointcloud
+      topic: /intel_realsense_r200_depth/points
+      queue_size: 10
+      publish_on_update: true # Whether to publish the elevation map after a callback from this source.
+      sensor_processor:
+        type: perfect
+    
+    # Terrasense integration
+    terrasense_topic: "/terrasense_grid_map"
+    
+    map_frame_id: "odom"
+    robot_base_frame_id: "base_footprint"
+    robot_pose_with_covariance_topic: "/odom"
+    track_point_frame_id: "base_footprint"
+    track_point_x: 0.0
+    track_point_y: 0.0
+    track_point_z: 0.0
+    
+    # Map parameters
+    length_in_x: 6.0
+    length_in_y: 6.0
+    position_x: 0.0
+    position_y: 0.0
+    resolution: 0.05
+    
+    # Update rates
+    min_update_rate: 5.0
+    fused_map_publishing_rate: 2.0
+    visibility_cleanup_rate: 1.0
+    
+    # Other parameters
+    robot_pose_cache_size: 200
+    time_tolerance: 0.1
+    
+    # Post-processing
+    postprocessor_num_threads: 4
+    
+    # Variance parameters
+    min_variance: 0.0001
+    max_variance: 0.05
+    mahalanobis_distance_threshold: 2.5
+    multi_height_noise: 0.001
+    
+    # Sensor processor parameters
+    sensor_processor__ignore_points_above: 0.4
+    sensor_processor__ignore_points_below: -0.5
+

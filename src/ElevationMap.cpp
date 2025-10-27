@@ -37,8 +37,8 @@ ElevationMap::ElevationMap(std::shared_ptr<rclcpp::Node> nodeHandle)
     : nodeHandle_(nodeHandle),
       rawMap_({"elevation", "variance", "horizontal_variance_x", "horizontal_variance_y", 
       "horizontal_variance_xy", "color", "time","dynamic_time", "lowest_scan_point", 
-      "sensor_x_at_lowest_scan", "sensor_y_at_lowest_scan", "sensor_z_at_lowest_scan"}),
-      fusedMap_({"elevation", "upper_bound", "lower_bound", "color"}),
+      "sensor_x_at_lowest_scan", "sensor_y_at_lowest_scan", "sensor_z_at_lowest_scan", "terrain_cost"}),
+      fusedMap_({"elevation", "upper_bound", "lower_bound", "color", "terrain_cost"}),
       // FIXME: Postprocessor num threads should be same as number of filters
       postprocessorPool_(nodeHandle_->get_parameter("postprocessor_num_threads").as_int(), nodeHandle_),
       hasUnderlyingMap_(false),
@@ -370,6 +370,10 @@ bool ElevationMap::fuse(const grid_map::Index& topLeftIndex, const grid_map::Ind
       fusedMap_.at("upper_bound", *areaIterator) =
           rawMapCopy.at("elevation", *areaIterator) + 2.0 * sqrt(rawMapCopy.at("variance", *areaIterator));
       fusedMap_.at("color", *areaIterator) = rawMapCopy.at("color", *areaIterator);
+      // Copy terrain_cost layer from raw map
+      if (rawMapCopy.exists("terrain_cost")) {
+        fusedMap_.at("terrain_cost", *areaIterator) = rawMapCopy.at("terrain_cost", *areaIterator);
+      }
       continue;
     }
 
@@ -392,6 +396,10 @@ bool ElevationMap::fuse(const grid_map::Index& topLeftIndex, const grid_map::Ind
     fusedMap_.at("upper_bound", *areaIterator) = upperBoundDistribution.quantile(0.99);  // TODO(max):
     // TODO(max): Add fusion of colors.
     fusedMap_.at("color", *areaIterator) = rawMapCopy.at("color", *areaIterator);
+    // Copy terrain_cost layer from raw map
+    if (rawMapCopy.exists("terrain_cost")) {
+      fusedMap_.at("terrain_cost", *areaIterator) = rawMapCopy.at("terrain_cost", *areaIterator);
+    }
   }
 
   fusedMap_.setTimestamp(rawMapCopy.getTimestamp());
@@ -776,6 +784,50 @@ boost::recursive_mutex& ElevationMap::getFusedDataMutex() {
 boost::recursive_mutex& ElevationMap::getRawDataMutex() {
   return rawMapMutex_;
 }
+
+void ElevationMap::updateTerrainCostLayer(const grid_map::GridMap& terrasenseMap) {
+  boost::recursive_mutex::scoped_lock scopedLockForRawData(rawMapMutex_);
+  
+  // Check if terrasense map has the cost layer
+  if (!terrasenseMap.exists("cost")) {
+    RCLCPP_WARN(nodeHandle_->get_logger(), "Terrasense map does not contain 'cost' layer.");
+    return;
+  }
+  
+  // Ensure terrain_cost layer exists in rawMap
+  if (!rawMap_.exists("terrain_cost")) {
+    rawMap_.add("terrain_cost", 0.0);  // Initialize with 0 (safe terrain)
+  }
+  
+  // Get the cost data from terrasense map
+  const auto& terrainCostData = terrasenseMap.get("cost");
+  
+  // Since terrasense publishes a small placeholder map with single cell,
+  // we'll use the value from that cell and apply it to the current robot position
+  // in the elevation map
+  
+  // Get the single cost value from terrasense (it's a 0.1x0.1 map with one cell)
+  grid_map::Index terrasenseIdx(0, 0);
+  float costValue = terrainCostData(terrasenseIdx(0), terrasenseIdx(1));
+  
+  // Apply this cost to a region around the map center (where robot currently is)
+  // We'll apply it to a small area around the center
+  grid_map::Position center = rawMap_.getPosition();
+  float applyRadius = 0.5;  // 0.5 meter radius around robot
+  
+  for (grid_map::GridMapIterator iterator(rawMap_); !iterator.isPastEnd(); ++iterator) {
+    grid_map::Position position;
+    rawMap_.getPosition(*iterator, position);
+    
+    // Check if this cell is within the radius
+    if ((position - center).norm() <= applyRadius) {
+      rawMap_.at("terrain_cost", *iterator) = costValue;
+    }
+  }
+  
+  RCLCPP_DEBUG(nodeHandle_->get_logger(), "Updated terrain_cost layer with cost value: %f", costValue);
+}
+
 
 
 

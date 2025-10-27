@@ -231,6 +231,12 @@ class ElevationMap {
   void underlyingMapCallback(const grid_map_msgs::msg::GridMap::SharedPtr underlyingMap);
 
   /*!
+   * Updates the terrain_cost layer from Terrasense data.
+   * @param terrasenseMap the grid map from Terrasense containing cost data.
+   */
+  void updateTerrainCostLayer(const grid_map::GridMap& terrasenseMap);
+
+  /*!
    * Method to set the height value around the center of the robot, can be used for initialization.
    * @param initPosition Position to calculate inner rectangle.
    * @param mapHeight The height that gets set uniformly.

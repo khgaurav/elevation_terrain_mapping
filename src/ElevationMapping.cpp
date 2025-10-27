@@ -110,6 +110,16 @@ void ElevationMapping::setupSubscribers() {  // Handle deprecated point_cloud_to
   } else {
     ignoreRobotMotionUpdates_ = true;
   }
+  
+  // Setup Terrasense subscriber
+  if (!terrasenseTopic_.empty()) {
+    terrasenseSubscriber_ = nodeHandle_->create_subscription<grid_map_msgs::msg::GridMap>(
+        terrasenseTopic_, 10,
+        std::bind(&ElevationMapping::terrasenseCallback, this, std::placeholders::_1));
+    RCLCPP_INFO(nodeHandle_->get_logger(), "Subscribed to Terrasense topic: %s", terrasenseTopic_.c_str());
+  } else {
+    RCLCPP_WARN(nodeHandle_->get_logger(), "Terrasense topic is empty. Terrain cost layer will not be updated.");
+  }
 }
 
 void ElevationMapping::setupServices() {
@@ -190,6 +200,7 @@ bool ElevationMapping::readParameters() {
   nodeHandle_->declare_parameter("track_point_y", 0.0);
   nodeHandle_->declare_parameter("track_point_z", 0.0);
   nodeHandle_->declare_parameter("robot_pose_cache_size", 200);
+  nodeHandle_->declare_parameter("terrasense_topic", std::string("/terrasense_grid_map"));
 
   // nodeHandle_->get_parameter("point_cloud_topic", pointCloudTopic_);
   nodeHandle_->get_parameter("robot_pose_with_covariance_topic", robotPoseTopic_);  
@@ -198,6 +209,7 @@ bool ElevationMapping::readParameters() {
   nodeHandle_->get_parameter("track_point_y", trackPoint_.y());
   nodeHandle_->get_parameter("track_point_z", trackPoint_.z());
   nodeHandle_->get_parameter("robot_pose_cache_size", robotPoseCacheSize_);
+  nodeHandle_->get_parameter("terrasense_topic", terrasenseTopic_);
 
   assert(robotPoseCacheSize_ >= 0);
 
@@ -489,6 +501,31 @@ void ElevationMapping::pointCloudCallback(sensor_msgs::msg::PointCloud2::ConstSh
   }
 
   // resetMapUpdateTimer();
+}
+
+void ElevationMapping::terrasenseCallback(const grid_map_msgs::msg::GridMap::SharedPtr terrasenseMsg) {
+  RCLCPP_DEBUG(nodeHandle_->get_logger(), "Received Terrasense grid map.");
+  
+  // Convert ROS message to GridMap
+  grid_map::GridMap terrasenseMap;
+  if (!grid_map::GridMapRosConverter::fromMessage(*terrasenseMsg, terrasenseMap)) {
+    RCLCPP_ERROR(nodeHandle_->get_logger(), "Failed to convert Terrasense message to GridMap.");
+    return;
+  }
+  
+  // Update the terrain cost layer in the elevation map
+  map_.updateTerrainCostLayer(terrasenseMap);
+  
+  // Optionally publish the updated map
+  if (map_.hasRawMapSubscribers()) {
+    map_.postprocessAndPublishRawElevationMap();
+  }
+  if (isFusingEnabled()) {
+    map_.fuseAll();
+    map_.publishFusedElevationMap();
+  }
+  
+  RCLCPP_DEBUG(nodeHandle_->get_logger(), "Updated elevation map with Terrasense data.");
 }
 
 void ElevationMapping::mapUpdateTimerCallback() {
